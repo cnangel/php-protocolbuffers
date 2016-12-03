@@ -56,6 +56,24 @@ static void php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARA
 		return;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*target = zend_hash_str_find(Z_OBJPROP_P(instance), name, length)) != NULL) {
+		if (type == IS_TRUE || type == IS_FALSE) {
+			if (Z_TYPE_P(value) != IS_TRUE || Z_TYPE_P(value) != IS_FALSE) {
+				convert_to_boolean(value);
+			}
+
+			ZVAL_BOOL(*target, Z_BVAL_P(value));
+		} else if (type == IS_STRING) {
+			zval *tmp;
+
+			ZVAL_STRING(tmp, Z_STRVAL_P(value));
+			zend_string *zstr_name = zend_string_init(name, length, 0);
+			zend_hash_update(Z_OBJPROP_P(instance), zstr_name, tmp);
+			zend_string_release(zstr_name);
+		}
+	}
+#else
 	if (zend_hash_find(Z_OBJPROP_P(instance), name, length, (void **)&target) == SUCCESS) {
 		if (type == IS_BOOL) {
 			if (Z_TYPE_P(value) != IS_BOOL) {
@@ -71,13 +89,18 @@ static void php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARA
 			zend_hash_update(Z_OBJPROP_P(instance), name, length, (void **)&tmp, sizeof(zval*), NULL);
 		}
 	}
+#endif
 }
 
 /* {{{ proto void ProtocolBuffersPHPMessageOptions::setUseWakeupAndSleep(boolean $use)
 */
 PHP_METHOD(protocolbuffers_php_message_options, setUseWakeupAndSleep)
 {
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("use_wakeup_and_sleep"), IS_TRUE);
+#else
 	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("use_wakeup_and_sleep"), IS_BOOL);
+#endif
 }
 /* }}} */
 
@@ -85,7 +108,11 @@ PHP_METHOD(protocolbuffers_php_message_options, setUseWakeupAndSleep)
 */
 PHP_METHOD(protocolbuffers_php_message_options, setUseSingleProperty)
 {
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("use_single_property"), IS_TRUE);
+#else
 	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("use_single_property"), IS_BOOL);
+#endif
 }
 /* }}} */
 
@@ -101,7 +128,11 @@ PHP_METHOD(protocolbuffers_php_message_options, setSinglePropertyName)
 */
 PHP_METHOD(protocolbuffers_php_message_options, setProcessUnknownFields)
 {
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("process_unknown_fields"), IS_TRUE);
+#else
 	php_protocolbuffers_message_options_set_value(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_STRS("process_unknown_fields"), IS_BOOL);
+#endif
 }
 /* }}} */
 

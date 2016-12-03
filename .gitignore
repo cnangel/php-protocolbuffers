@@ -31,4 +31,4 @@ ltmain.sh
 *.la
 tmp-php.ini
 php_test_results*
-
+tests

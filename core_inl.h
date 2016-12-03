@@ -1,6 +1,42 @@
 #ifndef PHP_PROTOCOLBUFFERS_HELPER_INL_H
 #define PHP_PROTOCOLBUFFERS_HELPER_INL_H
 
+#ifndef Z_TYPE_PP
+#define Z_TYPE_PP(v)            Z_TYPE(**v)
+#endif
+
+#ifndef Z_ARRVAL_PP
+#define Z_ARRVAL_PP(zval_pp)    Z_ARRVAL(**zval_pp)
+#endif
+
+#ifndef Z_LVAL_PP
+#define Z_LVAL_PP(zval_pp)      Z_LVAL(**zval_pp)
+#endif
+
+#ifndef Z_BVAL_PP
+#ifndef Z_BVAL
+#define Z_BVAL(zval)            ((zend_bool)(zval).value.lval)
+#endif
+#define Z_BVAL_PP(zval_pp)      Z_BVAL(**zval_pp)
+#endif
+
+#ifndef Z_DVAL_PP
+#define Z_DVAL_PP(zval_pp)      Z_DVAL(**zval_pp)
+#endif
+
+#ifndef Z_STRVAL_PP
+#define Z_STRVAL_PP(zval_pp)    Z_STRVAL(**zval_pp)
+#endif
+
+#ifndef Z_STRLEN_PP
+#define Z_STRLEN_PP(zval_pp)    Z_STRLEN(**zval_pp)
+#endif
+
+#ifndef Z_STR_PP
+#define Z_STR_PP(zval_pp)		Z_STR(**zval_pp)
+#endif
+
+
 static inline int is_utf8(const char *s, int len)
 {
 	int i;
@@ -171,17 +207,31 @@ static inline int php_protocolbuffers_get_lval_from_hash_by_tag(HashTable *proto
 {
 	zval **d, **dd;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	zval k;
+	if ((*d = zend_hash_index_find(proto, tag)) == NULL) {
+		return 0;
+	}
+#else
 	if (zend_hash_index_find(proto, tag, (void **)&d) != SUCCESS) {
 		return 0;
 	}
+#endif
 
 	if (Z_TYPE_PP(d) != IS_ARRAY) {
 		return 0;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	ZVAL_STRINGL(&k, name, name_len);
+	if ((*dd = zend_hash_find(Z_ARRVAL_PP(d), Z_STR(k))) != NULL) {
+		return Z_LVAL_PP(dd);
+	}
+#else
 	if (zend_hash_find(Z_ARRVAL_PP(d), (char*)name, name_len, (void **)&dd) == SUCCESS) {
 		return Z_LVAL_PP(dd);
 	}
+#endif
 
 	return 0;
 }
@@ -190,18 +240,33 @@ static inline int php_protocolbuffers_get_zval_from_hash_by_tag(HashTable *proto
 {
 	zval **d, **dd;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	zval k;
+	if ((*d = zend_hash_index_find(proto, tag)) == NULL) {
+		return 0;
+	}
+#else
 	if (zend_hash_index_find(proto, tag, (void **)&d) != SUCCESS) {
 		return 0;
 	}
+#endif
 
 	if (Z_TYPE_PP(d) != IS_ARRAY) {
 		return 0;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	ZVAL_STRINGL(&k, name, name_len);
+	if ((*dd = zend_hash_find(Z_ARRVAL_PP(d), Z_STR(k))) != NULL) {
+		*result = *dd;
+		return 1;
+	}
+#else
 	if (zend_hash_find(Z_ARRVAL_PP(d), (char*)name, name_len, (void **)&dd) == SUCCESS) {
 		*result = *dd;
 		return 1;
 	}
+#endif
 
 	return 0;
 }
@@ -313,6 +378,31 @@ static inline void php_protocolbuffers_decode_add_value_and_consider_repeated(ph
 		hash     = s->name_h;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (s->repeated) {
+		if (!zend_hash_str_exists(hresult, name, name_len)) {
+			zval arr;
+
+			array_init(&arr);
+
+			zend_hash_next_index_insert(Z_ARRVAL(arr), dz);
+
+			zend_hash_str_update(hresult, name, name_len, &arr);
+		} else {
+			zval *arr2;
+
+			if ((arr2 = zend_hash_str_find(hresult, name, name_len)) != NULL) {
+				if (Z_TYPE_P(arr2) == IS_NULL) {
+					array_init(arr2);
+				}
+
+				zend_hash_next_index_insert(Z_ARRVAL_P(arr2), dz);
+			}
+		}
+	} else {
+		zend_hash_str_update(hresult, name, name_len, dz);
+	}
+#else
 	if (s->repeated) {
 		if (!zend_hash_quick_exists(hresult, name, name_len, hash)) {
 			zval *arr;
@@ -325,7 +415,11 @@ static inline void php_protocolbuffers_decode_add_value_and_consider_repeated(ph
 
 			zend_hash_quick_update(hresult, name, name_len, hash, (void **)&arr, sizeof(arr), NULL);
 			Z_ADDREF_P(arr);
-			zval_ptr_dtor(&arr);
+#if ZEND_MODULE_API_NO >= 20151012
+			zval_ptr_dtor(dz);
+#else
+			zval_ptr_dtor(&dz);
+#endif
 		} else {
 			zval **arr2;
 
@@ -342,22 +436,26 @@ static inline void php_protocolbuffers_decode_add_value_and_consider_repeated(ph
 		//Z_ADDREF_P(dz);
 		zend_hash_quick_update(hresult, name, name_len, hash, (void **)&dz, sizeof(dz), NULL);
 	}
+#endif
 }
 
 static inline int php_protocolbuffers_process_varint(INTERNAL_FUNCTION_PARAMETERS, int wiretype, int tag, php_protocolbuffers_scheme_container *container, php_protocolbuffers_scheme *scheme, uint64_t value, HashTable *hresult, int use_string)
 {
 	pbf __payload = {0};
 	zval *dz = NULL;
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(dz);
+#else
+	MAKE_STD_ZVAL(dz);
+#endif
 
 	if (scheme == NULL) {
 		if (container->process_unknown_fields > 0) {
-			MAKE_STD_ZVAL(dz);
 			php_protocolbuffers_process_unknown_field(INTERNAL_FUNCTION_PARAM_PASSTHRU, container, hresult, dz, tag, wiretype, value);
 		} else {
 			/* NOTE: skip unknown field. nothing to do. */
 		}
 	} else {
-		MAKE_STD_ZVAL(dz);
 		switch (scheme->type) {
 			case TYPE_BOOL:
 				ZVAL_BOOL(dz, value);
@@ -382,7 +480,11 @@ static inline int php_protocolbuffers_process_varint(INTERNAL_FUNCTION_PARAMETER
 				__payload.type = TYPE_UINT64;__payload.value.uint64 = (uint64_t)value;
 			break;
 			default:
+#if ZEND_MODULE_API_NO >= 20151012
+				zval_ptr_dtor(dz);
+#else
 				zval_ptr_dtor(&dz);
+#endif
 				return 0;
 		}
 		if (scheme->type != TYPE_BOOL) {
@@ -399,6 +501,11 @@ static inline int php_protocolbuffers_process_fixed64(INTERNAL_FUNCTION_PARAMETE
 {
 	pbf __payload = {0};
 	zval *dz = NULL;
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(dz);
+#else
+	MAKE_STD_ZVAL(dz);
+#endif
 
 	if (scheme == NULL) {
 		if (container->process_unknown_fields > 0) {
@@ -407,8 +514,6 @@ static inline int php_protocolbuffers_process_fixed64(INTERNAL_FUNCTION_PARAMETE
 			/* skip unknown field */
 		}
 	} else {
-		MAKE_STD_ZVAL(dz);
-
 		switch (scheme->type) {
 			case TYPE_DOUBLE:
 			{
@@ -441,7 +546,11 @@ static inline int php_protocolbuffers_process_fixed64(INTERNAL_FUNCTION_PARAMETE
 			}
 			break;
 			default:
+#if ZEND_MODULE_API_NO >= 20151012
+				zval_ptr_dtor(dz);
+#else
 				zval_ptr_dtor(&dz);
+#endif
 				return 0;
 		}
 		php_protocolbuffers_decode_add_value_and_consider_repeated(container, scheme, hresult, dz TSRMLS_CC);
@@ -454,6 +563,11 @@ static inline int php_protocolbuffers_process_fixed32(INTERNAL_FUNCTION_PARAMETE
 {
 	pbf __payload = {0};
 	zval *dz = NULL;
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(dz);
+#else
+	MAKE_STD_ZVAL(dz);
+#endif
 
 	if (scheme == NULL) {
 		if (container->process_unknown_fields > 0) {
@@ -462,8 +576,6 @@ static inline int php_protocolbuffers_process_fixed32(INTERNAL_FUNCTION_PARAMETE
 			/* skip unknown field */
 		}
 	} else {
-		MAKE_STD_ZVAL(dz);
-
 		switch(scheme->type) {
 			case TYPE_FLOAT:
 			{
@@ -490,7 +602,11 @@ static inline int php_protocolbuffers_process_fixed32(INTERNAL_FUNCTION_PARAMETE
 			}
 			break;
 			default:
+#if ZEND_MODULE_API_NO >= 20151012
+				zval_ptr_dtor(dz);
+#else
 				zval_ptr_dtor(&dz);
+#endif
 				return 0;
 		}
 		php_protocolbuffers_format_string(dz, &__payload, use_string TSRMLS_CC);

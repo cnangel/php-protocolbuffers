@@ -61,11 +61,18 @@ int php_protocolbuffers_descriptor_properties_init(zval *object TSRMLS_DC)
 	ALLOC_HASHTABLE(properties);
 	zend_hash_init(properties, 0, NULL, ZVAL_PTR_DTOR, 0);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(pp);
+	zend_hash_str_update(properties, "fields", sizeof("fields"), pp);
+
+	zend_merge_properties(object, properties);
+#else
 	MAKE_STD_ZVAL(pp);
 	array_init(pp);
 	zend_hash_update(properties, "fields", sizeof("fields"), (void **)&pp, sizeof(zval), NULL);
 
 	zend_merge_properties(object, properties, 1 TSRMLS_CC);
+#endif
 	return 0;
 }
 
@@ -99,7 +106,11 @@ static void php_protocolbuffers_descriptor_free_storage(php_protocolbuffers_desc
 				efree((object->container)->scheme[i].mangled_name);
 			}
 			if ((object->container)->scheme[i].default_value != NULL) {
+#if ZEND_MODULE_API_NO >= 20151012
+				zval_ptr_dtor((object->container)->scheme[i].default_value);
+#else
 				zval_ptr_dtor(&(object->container)->scheme[i].default_value);
+#endif
 			}
 		}
 
@@ -122,6 +133,21 @@ static void php_protocolbuffers_descriptor_free_storage(php_protocolbuffers_desc
 	efree(object);
 }
 
+#if ZEND_MODULE_API_NO >= 20151012
+zend_object *php_protocolbuffers_descriptor_new(zend_class_entry *ce TSRMLS_DC)
+{
+    php_protocolbuffers_descriptor *descriptor_object;
+
+    descriptor_object = ecalloc(1, sizeof(php_protocolbuffers_descriptor) + zend_object_properties_size(ce));
+    descriptor_object->zo.ce = ce;
+
+    zend_object_std_init(&descriptor_object->zo, ce);
+    object_properties_init(&descriptor_object->zo, ce);
+    descriptor_object->zo.handlers = zend_get_std_object_handlers();
+    return &descriptor_object->zo;
+
+}
+#else
 zend_object_value php_protocolbuffers_descriptor_new(zend_class_entry *ce TSRMLS_DC)
 {
 	zend_object_value retval;
@@ -135,6 +161,7 @@ zend_object_value php_protocolbuffers_descriptor_new(zend_class_entry *ce TSRMLS
 
 	return retval;
 }
+#endif
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_protocolbuffers_descriptor___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -168,9 +195,13 @@ PHP_METHOD(protocolbuffers_descriptor, getName)
 	zval *instance = getThis();
 	php_protocolbuffers_descriptor *descriptor;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	descriptor = (php_protocolbuffers_descriptor *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_descriptor, zo)); 
+	RETURN_STRINGL(descriptor->name, descriptor->name_len);
+#else
 	descriptor = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_descriptor, instance);
-
 	RETURN_STRINGL(descriptor->name, descriptor->name_len, 1);
+#endif
 }
 /* }}} */
 
@@ -189,9 +220,15 @@ PHP_METHOD(protocolbuffers_descriptor, getField)
 
 	if (php_protocolbuffers_read_protected_property(instance, ZEND_STRS("fields"), &result TSRMLS_CC)) {
 		zval **entry;
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((*entry = zend_hash_index_find(Z_ARRVAL_P(result), tag)) != NULL) {
+			RETVAL_ZVAL(*entry, 0, 1);
+		}
+#else
 		if (zend_hash_index_find(Z_ARRVAL_P(result), tag, (void **)&entry) == SUCCESS) {
 			RETVAL_ZVAL(*entry, 0, 1);
 		}
+#endif
 	}
 }
 /* }}} */
@@ -218,8 +255,11 @@ PHP_METHOD(protocolbuffers_descriptor, dump)
 	int n = 0;
 	php_protocolbuffers_scheme *ischeme;
 
-
+#if ZEND_MODULE_API_NO >= 20151012
+	descriptor = (php_protocolbuffers_descriptor *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_descriptor, zo)); 
+#else
 	descriptor = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_descriptor, instance);
+#endif
 
 	php_printf("{\n");
 	if (descriptor->name_len > 0) {

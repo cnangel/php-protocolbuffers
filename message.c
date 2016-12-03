@@ -30,7 +30,11 @@
 
 #include "protocolbuffers.h"
 #include "message.h"
+#if ZEND_MODULE_API_NO >= 20151012
+#include "Zend/zend_smart_str.h"
+#else
 #include "ext/standard/php_smart_str.h"
+#endif
 #include "unknown_field_set.h"
 #include "extension_registry.h"
 
@@ -56,7 +60,7 @@ static int json_serializable_checked = 0;
 		int __err;\
 		\
 		__ce  = Z_OBJCE_P(instance);\
-		__err = php_protocolbuffers_get_scheme_container(__ce->name, __ce->name_length, container TSRMLS_CC);\
+		__err = php_protocolbuffers_get_scheme_container(ZSTR_VAL(__ce->name), ZSTR_LEN(__ce->name), container TSRMLS_CC);\
 		if (__err) {\
 			if (EG(exception)) {\
 				return;\
@@ -75,13 +79,31 @@ static void php_protocolbuffers_message_free_storage(php_protocolbuffers_message
 {
 	if (object->container != NULL) {
 		ZVAL_NULL(object->container);
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(object->container);
+#else
 		zval_ptr_dtor(&object->container);
+#endif
 		object->container = NULL;
 	}
 	zend_object_std_dtor(&object->zo TSRMLS_CC);
 	efree(object);
 }
 
+#if ZEND_MODULE_API_NO >= 20151012
+zend_object *php_protocolbuffers_message_new(zend_class_entry *ce TSRMLS_DC)
+{
+    php_protocolbuffers_message *message_object;
+
+    message_object = ecalloc(1, sizeof(php_protocolbuffers_message) + zend_object_properties_size(ce));
+    message_object->zo.ce = ce;
+
+    zend_object_std_init(&message_object->zo, ce);
+    object_properties_init(&message_object->zo, ce);
+    message_object->zo.handlers = zend_get_std_object_handlers();
+    return &message_object->zo;
+}
+#else
 zend_object_value php_protocolbuffers_message_new(zend_class_entry *ce TSRMLS_DC)
 {
 	zend_object_value retval;
@@ -97,6 +119,7 @@ zend_object_value php_protocolbuffers_message_new(zend_class_entry *ce TSRMLS_DC
 
 	return retval;
 }
+#endif
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_protocolbuffers_message___construct, 0, 0, 0)
 	ZEND_ARG_INFO(0, params)
@@ -182,7 +205,11 @@ static void php_protocolbuffers_get_hash(php_protocolbuffers_scheme_container *c
 		n     = container->single_property_name;
 		n_len = container->single_property_name_len;
 
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((htt = zend_hash_str_find_ptr(Z_OBJPROP_P(object), n, n_len)) == NULL) {
+#else
 		if (zend_hash_find(Z_OBJPROP_P(object), n, n_len, (void **)&htt) == FAILURE) {
+#endif
 			return;
 		}
 
@@ -221,41 +248,79 @@ static void php_protocolbuffers_message_merge_from(php_protocolbuffers_scheme_co
 			name_len = scheme->mangled_name_len;
 		}
 
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((*tmp = zend_hash_str_find(hts, name, name_len)) != NULL) {
+#else
 		if (zend_hash_find(hts, name, name_len, (void **)&tmp) == SUCCESS) {
+#endif
 			zval *val;
 
 			switch (Z_TYPE_PP(tmp)) {
 			case IS_NULL:
 			break;
 			case IS_STRING:
+#if ZEND_MODULE_API_NO >= 20151012
+				ZVAL_STRINGL(val, Z_STRVAL_PP(tmp), Z_STRLEN_PP(tmp));
+
+				Z_ADDREF_P(val);
+				zend_string *nn = zend_string_init(name, name_len, 0);
+				zend_hash_update(htt, nn, val);
+				zend_string_release(nn);
+				zval_ptr_dtor(val);
+#else
 				MAKE_STD_ZVAL(val);
 				ZVAL_STRINGL(val, Z_STRVAL_PP(tmp), Z_STRLEN_PP(tmp), 1);
 
 				Z_ADDREF_P(val);
 				zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 				zval_ptr_dtor(&val);
+#endif
 				break;
 			case IS_LONG:
+#if ZEND_MODULE_API_NO >= 20151012
+				ZVAL_LONG(val, Z_LVAL_PP(tmp));
+
+				Z_ADDREF_P(val);
+				zend_string *n2 = zend_string_init(name, name_len, 0);
+				zend_hash_update(htt, n2, val);
+				zend_string_release(n2);
+				zval_ptr_dtor(val);
+#else
 				MAKE_STD_ZVAL(val);
 				ZVAL_LONG(val, Z_LVAL_PP(tmp));
 
 				Z_ADDREF_P(val);
 				zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 				zval_ptr_dtor(&val);
+#endif
 			break;
 			case IS_DOUBLE:
+#if ZEND_MODULE_API_NO >= 20151012
+				ZVAL_DOUBLE(val, Z_DVAL_PP(tmp));
+
+				Z_ADDREF_P(val);
+				zend_string *n3 = zend_string_init(name, name_len, 0);
+				zend_hash_update(htt, n3, val);
+				zend_string_release(n3);
+				zval_ptr_dtor(val);
+#else
 				MAKE_STD_ZVAL(val);
 				ZVAL_DOUBLE(val, Z_DVAL_PP(tmp));
 
 				Z_ADDREF_P(val);
 				zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 				zval_ptr_dtor(&val);
+#endif
 			break;
 			case IS_OBJECT:
 			{
 				zval **tmp2 = NULL;
 
+#if ZEND_MODULE_API_NO >= 20151012
+				if ((*tmp2 = zend_hash_str_find(htt, name, name_len)) != NULL) {
+#else
 				if (zend_hash_find(htt, name, name_len, (void **)&tmp2) == SUCCESS) {
+#endif
 					if (Z_TYPE_PP(tmp2) == IS_OBJECT) {
 						char *n;
 						int n_len;
@@ -268,26 +333,68 @@ static void php_protocolbuffers_message_merge_from(php_protocolbuffers_scheme_co
 
 						php_protocolbuffers_message_merge_from(c, _htt, _hts TSRMLS_CC);
 					} else {
+#if ZEND_MODULE_API_NO >= 20151012
+						ZVAL_ZVAL(val, *tmp, 1, 0);
+
+						Z_ADDREF_P(val);
+						zend_string *n = zend_string_init(name, name_len, 0);
+						zend_hash_update(htt, n, val);
+						zend_string_release(n);
+						zval_ptr_dtor(val);
+#else
 						MAKE_STD_ZVAL(val);
 						ZVAL_ZVAL(val, *tmp, 1, 0);
 
 						Z_ADDREF_P(val);
 						zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 						zval_ptr_dtor(&val);
+#endif
 					}
 				} else {
+#if ZEND_MODULE_API_NO >= 20151012
+					ZVAL_ZVAL(val, *tmp, 1, 0);
+
+					Z_ADDREF_P(val);
+					zend_string *n = zend_string_init(name, name_len, 0);
+					zend_hash_update(htt, n, val);
+					zend_string_release(n);
+					zval_ptr_dtor(val);
+#else
 					MAKE_STD_ZVAL(val);
 					ZVAL_ZVAL(val, *tmp, 1, 0);
 
 					Z_ADDREF_P(val);
 					zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 					zval_ptr_dtor(&val);
+#endif
 				}
 			}
 			break;
 			case IS_ARRAY: {
 				zval **tmp2 = NULL;
 
+#if ZEND_MODULE_API_NO >= 20151012
+				if ((*tmp2 = zend_hash_str_find(htt, name, name_len)) != NULL) {
+					if (Z_TYPE_PP(tmp2) == IS_ARRAY) {
+						php_array_merge(Z_ARRVAL_PP(tmp2), Z_ARRVAL_PP(tmp));
+					} else {
+						ZVAL_ZVAL(val, *tmp, 1, 0);
+
+						Z_ADDREF_P(val);
+						zend_string *n = zend_string_init(name, name_len, 0);
+						zend_hash_update(htt, n, val);
+						zend_string_release(n);
+						zval_ptr_dtor(val);
+					}
+				} else {
+					ZVAL_ZVAL(val, *tmp, 1, 0);
+
+					Z_ADDREF_P(val);
+					zend_string *n = zend_string_init(name, name_len, 0);
+					zend_hash_update(htt, n, val);
+					zend_string_release(n);
+					zval_ptr_dtor(val);
+#else
 				if (zend_hash_find(htt, name, name_len, (void **)&tmp2) == SUCCESS) {
 					if (Z_TYPE_PP(tmp2) == IS_ARRAY) {
 						php_array_merge(Z_ARRVAL_PP(tmp2), Z_ARRVAL_PP(tmp), 1 TSRMLS_CC);
@@ -306,6 +413,7 @@ static void php_protocolbuffers_message_merge_from(php_protocolbuffers_scheme_co
 					Z_ADDREF_P(val);
 					zend_hash_update(htt, name, name_len, (void **)&val, sizeof(zval *), NULL);
 					zval_ptr_dtor(&val);
+#endif
 				}
 			}
 			break;
@@ -320,6 +428,50 @@ static void php_protocolbuffers_message_merge_from(php_protocolbuffers_scheme_co
 static inline void php_protocolbuffers_typeconvert(php_protocolbuffers_scheme *scheme, zval *vl TSRMLS_DC)
 {
 	// TODO: check message
+#if ZEND_MODULE_API_NO >= 20151012
+#define TYPE_CONVERT(vl) \
+		switch (scheme->type) {\
+			case TYPE_STRING:\
+				if (Z_TYPE_P(vl) != IS_STRING) {\
+					if (Z_TYPE_P(vl) == IS_OBJECT && zend_hash_str_exists(&(Z_OBJCE_P(vl)->function_table), ZEND_STRS("__tostring"))) {\
+					} else {\
+						convert_to_string(vl);\
+					}\
+				}\
+			break;\
+			case TYPE_SINT32:\
+			case TYPE_INT32:\
+			case TYPE_UINT32:\
+				if (Z_TYPE_P(vl) != IS_LONG) {\
+					if (Z_TYPE_P(vl) != IS_STRING) {\
+						convert_to_long(vl);\
+					}\
+				}\
+			break;\
+			case TYPE_SINT64:\
+			case TYPE_INT64:\
+			case TYPE_UINT64:\
+				if (Z_TYPE_P(vl) != IS_LONG) {\
+					if (Z_TYPE_P(vl) != IS_STRING) {\
+						convert_to_long(vl);\
+					}\
+				}\
+			break;\
+			case TYPE_DOUBLE:\
+			case TYPE_FLOAT:\
+				if (Z_TYPE_P(vl) != IS_DOUBLE) {\
+					if (Z_TYPE_P(vl) != IS_STRING) {\
+						convert_to_double(vl);\
+					}\
+				}\
+			break;\
+			case TYPE_BOOL:\
+				if (Z_TYPE_P(vl) != IS_TRUE || Z_TYPE_P(vl) != IS_FALSE) {\
+					convert_to_boolean(vl);\
+				}\
+			break;\
+		}
+#else
 #define TYPE_CONVERT(vl) \
 		switch (scheme->type) {\
 			case TYPE_STRING:\
@@ -361,8 +513,8 @@ static inline void php_protocolbuffers_typeconvert(php_protocolbuffers_scheme *s
 					convert_to_boolean(vl);\
 				}\
 			break;\
-		}\
-
+		}
+#endif
 
 	if (scheme->repeated < 1) {
 		TYPE_CONVERT(vl)
@@ -372,7 +524,7 @@ static inline void php_protocolbuffers_typeconvert(php_protocolbuffers_scheme *s
 
 		if (Z_TYPE_P(vl) == IS_ARRAY) {
 			zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(vl), &pos);
-			while (zend_hash_get_current_data_ex(Z_ARRVAL_P(vl), (void **)&entry, &pos) == SUCCESS) {
+			while ((*entry = zend_hash_get_current_data_ex(Z_ARRVAL_P(vl), &pos)) != NULL) {
 				TYPE_CONVERT(*entry)
 
 				zend_hash_move_forward_ex(Z_ARRVAL_P(vl), &pos);
@@ -416,7 +568,11 @@ static void php_protocolbuffers_message_get_hash_table_by_container(php_protocol
 		n     = container->single_property_name;
 		n_len = container->single_property_name_len;
 
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((htt = zend_hash_str_find_ptr(Z_OBJPROP_P(instance), n, n_len)) == NULL) {
+#else
 		if (zend_hash_find(Z_OBJPROP_P(instance), n, n_len, (void **)&htt) == FAILURE) {
+#endif
 			return;
 		}
 	} else {
@@ -452,6 +608,31 @@ static void php_protocolbuffers_message_get(INTERNAL_FUNCTION_PARAMETERS, zval *
 
 	php_protocolbuffers_message_get_hash_table_by_container(container, scheme, instance, &htt, &n, &n_len TSRMLS_CC);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+		if (scheme->repeated && params != NULL && Z_TYPE_P(params) != IS_NULL) {
+			zval **value;
+
+			if (Z_TYPE_P(params) != IS_LONG) {
+				convert_to_long(params);
+			}
+
+			if ((*value = zend_hash_index_find(Z_ARRVAL_PP(e), Z_LVAL_P(params))) != NULL) {
+				RETURN_ZVAL(*value, 1, 0);
+			}
+		} else {
+			if (scheme->ce != NULL && Z_TYPE_PP(e) == IS_NULL) {
+				zval *tmp;
+				object_init_ex(tmp, scheme->ce);
+				php_protocolbuffers_properties_init(tmp, scheme->ce TSRMLS_CC);
+
+				RETURN_ZVAL(tmp, 0, 1);
+			} else {
+				RETURN_ZVAL(*e, 1, 0);
+			}
+		}
+	}
+#else
 	if (zend_hash_find(htt, n, n_len, (void **)&e) == SUCCESS) {
 		if (scheme->repeated && params != NULL && Z_TYPE_P(params) != IS_NULL) {
 			zval **value;
@@ -476,6 +657,7 @@ static void php_protocolbuffers_message_get(INTERNAL_FUNCTION_PARAMETERS, zval *
 			}
 		}
 	}
+#endif
 }
 
 static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *instance, php_protocolbuffers_scheme_container *container, char *name, int name_len, char *name2, int name2_len, zval *value)
@@ -491,19 +673,31 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 
 	scheme = php_protocolbuffers_message_get_scheme_by_name(container, name, name_len, name2, name2_len);
 	if (scheme == NULL) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "%s does not find", name);
 		return;
 	}
 
 	if (scheme->is_extension) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "set method can't use for extension value", name);
 		return;
 	}
 
 	if (Z_TYPE_P(value) == IS_NULL) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "set method can't pass null value", name);
 		return;
 	}
@@ -514,6 +708,14 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 			zval **element, *outer;
 
 			if (zend_hash_num_elements(Z_ARRVAL_P(value)) > 0) {
+#if ZEND_MODULE_API_NO >= 20151012
+				array_init(outer);
+
+				for(zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(value), &pos);
+								(*element = zend_hash_get_current_data_ex(Z_ARRVAL_P(value), &pos)) != NULL;
+								zend_hash_move_forward_ex(Z_ARRVAL_P(value), &pos)
+				) {
+#else
 				MAKE_STD_ZVAL(outer);
 				array_init(outer);
 
@@ -521,6 +723,7 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 								zend_hash_get_current_data_ex(Z_ARRVAL_P(value), (void **)&element, &pos) == SUCCESS;
 								zend_hash_move_forward_ex(Z_ARRVAL_P(value), &pos)
 				) {
+#endif
 					zval *child, *param;
 
 					if (Z_TYPE_PP(element) == IS_NULL) {
@@ -529,17 +732,36 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 
 					if (Z_TYPE_PP(element) == IS_OBJECT) {
 						if (scheme->ce != Z_OBJCE_PP(element)) {
+#if ZEND_MODULE_API_NO >= 20151012
+							zval_ptr_dtor(outer);
+#else
 							zval_ptr_dtor(&outer);
+#endif
 							zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "expected %s class. given %s class", scheme->ce->name, Z_OBJCE_PP(element)->name);
 							return;
 						} else {
+#if ZEND_MODULE_API_NO >= 20151012
+							m = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(*element) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 							m = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, *element);
+#endif
 							ZVAL_ZVAL(m->container, instance, 0, 0);
 
 							Z_ADDREF_PP(element);
 							add_next_index_zval(outer, *element);
 						}
 					} else {
+#if ZEND_MODULE_API_NO >= 20151012
+						ZVAL_ZVAL(param, *element, 1, 0);
+
+						object_init_ex(child, scheme->ce);
+						php_protocolbuffers_properties_init(child, scheme->ce TSRMLS_CC);
+
+						zend_call_method_with_1_params(child, scheme->ce, NULL, ZEND_CONSTRUCTOR_FUNC_NAME, NULL, param);
+						zval_ptr_dtor(param);
+
+						m = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(child) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 						MAKE_STD_ZVAL(child);
 						MAKE_STD_ZVAL(param);
 						ZVAL_ZVAL(param, *element, 1, 0);
@@ -551,6 +773,7 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 						zval_ptr_dtor(&param);
 
 						m = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, child);
+#endif
 						ZVAL_ZVAL(m->container, instance, 0, 0);
 						add_next_index_zval(outer, child);
 					}
@@ -565,6 +788,14 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 				/* NOTE(chobie): Array to Object conversion */
 				zval *param;
 
+#if ZEND_MODULE_API_NO >= 20151012
+				ZVAL_ZVAL(param, value, 1, 0);
+
+				object_init_ex(tmp, scheme->ce);
+				php_protocolbuffers_properties_init(tmp, scheme->ce TSRMLS_CC);
+				zend_call_method_with_1_params(tmp, scheme->ce, NULL, ZEND_CONSTRUCTOR_FUNC_NAME, NULL, param);
+				zval_ptr_dtor(param);
+#else
 				MAKE_STD_ZVAL(tmp);
 				MAKE_STD_ZVAL(param);
 
@@ -574,28 +805,51 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 				php_protocolbuffers_properties_init(tmp, scheme->ce TSRMLS_CC);
 				zend_call_method_with_1_params(&tmp, scheme->ce, NULL, ZEND_CONSTRUCTOR_FUNC_NAME, NULL, param);
 				zval_ptr_dtor(&param);
+#endif
 
 				value = tmp;
 				should_free = 1;
 			}
 
 			if (scheme->ce != Z_OBJCE_P(value)) {
+#if ZEND_MODULE_API_NO >= 20151012
+				zval_ptr_dtor(value);
+#else
 				zval_ptr_dtor(&value);
+#endif
 				zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "expected %s class. given %s class", scheme->ce->name, Z_OBJCE_P(value)->name);
 				return;
 			}
 
+#if ZEND_MODULE_API_NO >= 20151012
+			m = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(value) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 			m = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, value);
+#endif
 			ZVAL_ZVAL(m->container, instance, 0, 0);
 		}
 	}
 
 	php_protocolbuffers_message_get_hash_table_by_container(container, scheme, instance, &htt, &n, &n_len TSRMLS_CC);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+#else
 	if (zend_hash_find(htt, n, n_len, (void **)&e) == SUCCESS) {
+#endif
 		zval *vl = NULL;
 
 		if (container->use_single_property > 0) {
+#if ZEND_MODULE_API_NO >= 20151012
+			ZVAL_ZVAL(vl, *e, 1, 0);
+			php_protocolbuffers_typeconvert(scheme, vl TSRMLS_CC);
+
+			Z_ADDREF_P(vl);
+			zend_string *name = zend_string_init(scheme->name, scheme->name_len, 0);
+			zend_hash_update(htt, name, vl);
+			zend_string_release(name);
+			zval_ptr_dtor(vl);
+#else
 			MAKE_STD_ZVAL(vl);
 			ZVAL_ZVAL(vl, *e, 1, 0);
 			php_protocolbuffers_typeconvert(scheme, vl TSRMLS_CC);
@@ -603,20 +857,34 @@ static void php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAMETERS, zval *
 			Z_ADDREF_P(vl);
 			zend_hash_update(htt, scheme->name, scheme->name_len, (void **)&vl, sizeof(zval *), NULL);
 			zval_ptr_dtor(&vl);
+#endif
 		} else {
 			zval *garvage = *e;
 
+#if ZEND_MODULE_API_NO >= 20151012
+			ZVAL_ZVAL(vl, value, 1, 0);
+#else
 			MAKE_STD_ZVAL(vl);
 			ZVAL_ZVAL(vl, value, 1, 0);
+#endif
 
 			Z_ADDREF_P(vl);
 			php_protocolbuffers_typeconvert(scheme, vl TSRMLS_CC);
 			*e = vl;
+#if ZEND_MODULE_API_NO >= 20151012
+			zval_ptr_dtor(garvage);
+			zval_ptr_dtor(vl);
+#else
 			zval_ptr_dtor(&garvage);
 			zval_ptr_dtor(&vl);
+#endif
 		}
 		if (should_free) {
+#if ZEND_MODULE_API_NO >= 20151012
+			zval_ptr_dtor(value);
+#else
 			zval_ptr_dtor(&value);
+#endif
 		}
 	}
 }
@@ -641,9 +909,36 @@ static void php_protocolbuffers_message_clear(INTERNAL_FUNCTION_PARAMETERS, zval
 	}
 
 	php_protocolbuffers_message_get_hash_table_by_container(container, scheme, instance, &htt, &n, &n_len TSRMLS_CC);
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+		zval *vl = NULL;
+		if (container->use_single_property > 0) {
+			if (scheme->repeated > 0) {
+				array_init(vl);
+			} else {
+				ZVAL_NULL(vl);
+			}
+			php_protocolbuffers_typeconvert(scheme, vl TSRMLS_CC);
+			
+			zend_string *name = zend_string_init(scheme->name, scheme->name_len, 0);
+			zend_hash_update(htt, name, vl);
+			zend_string_release(name);
+		} else {
+			zval *garvage = *e;
+
+			if (scheme->repeated > 0) {
+				array_init(vl);
+			} else {
+				ZVAL_NULL(vl);
+			}
+
+			*e = vl;
+			zval_ptr_dtor(garvage);
+		}
+	}
+#else
 	if (zend_hash_find(htt, n, n_len, (void **)&e) == SUCCESS) {
 		zval *vl = NULL;
-
 		if (container->use_single_property > 0) {
 			MAKE_STD_ZVAL(vl);
 			if (scheme->repeated > 0) {
@@ -668,6 +963,7 @@ static void php_protocolbuffers_message_clear(INTERNAL_FUNCTION_PARAMETERS, zval
 			zval_ptr_dtor(&garvage);
 		}
 	}
+#endif
 }
 
 static void php_protocolbuffers_message_append(INTERNAL_FUNCTION_PARAMETERS, zval *instance, php_protocolbuffers_scheme_container *container, char *name, int name_len, char *name2, int name2_len, zval *value)
@@ -681,70 +977,126 @@ static void php_protocolbuffers_message_append(INTERNAL_FUNCTION_PARAMETERS, zva
 
 	scheme = php_protocolbuffers_message_get_scheme_by_name(container, name, name_len, name2, name2_len);
 	if (scheme == NULL) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "%s does not find", name);
 		return;
 	}
 
 	if (scheme->is_extension) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "append method can't use for extension value", name);
 		return;
 	}
 
 	if (scheme->repeated < 1) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "append method can't use for non repeated value", name);
 		return;
 	}
 
 	if (Z_TYPE_P(value) == IS_NULL) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(value);
+#else
 		zval_ptr_dtor(&value);
+#endif
 		zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "append method can't pass null value", name);
 		return;
 	}
 
 	if (scheme->ce != NULL) {
 		if (scheme->ce != Z_OBJCE_P(value)) {
+#if ZEND_MODULE_API_NO >= 20151012
+			zval_ptr_dtor(value);
+#else
 			zval_ptr_dtor(&value);
+#endif
 			zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "expected %s class. given %s class", scheme->ce->name, Z_OBJCE_P(value)->name);
 			return;
 		}
+#if ZEND_MODULE_API_NO >= 20151012
+		m = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(value) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 		m = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, value);
+#endif
 		ZVAL_ZVAL(m->container, instance, 0, 0);
 	}
 
 	php_protocolbuffers_message_get_hash_table_by_container(container, scheme, instance, &htt, &n, &n_len TSRMLS_CC);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (container->use_single_property > 0 && zend_hash_str_exists(htt, n, n_len) == 0) {
+		zval_ptr_dtor(value);
+		zend_error(E_ERROR, "not initialized");
+		return;
+	}
+#else
 	if (container->use_single_property > 0 && zend_hash_exists(htt, n, n_len) == 0) {
 		zval_ptr_dtor(&value);
 		zend_error(E_ERROR, "not initialized");
 		return;
 	}
+#endif
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+#else
 	if (zend_hash_find(htt, n, n_len, (void **)&e) == SUCCESS) {
+#endif
 		zval *nval = NULL, *val = NULL;
 		int flag = 0;
 
 		if (Z_TYPE_PP(e) != IS_ARRAY) {
+#if ZEND_MODULE_API_NO >= 20151012
+			array_init(nval);
+#else
 			MAKE_STD_ZVAL(nval);
 			array_init(nval);
+#endif
 			flag = 1;
 		} else {
 			nval = *e;
 		}
 
+#if ZEND_MODULE_API_NO >= 20151012
+		ZVAL_ZVAL(val, value, 1, 0);
+#else
 		MAKE_STD_ZVAL(val);
 		ZVAL_ZVAL(val, value, 1, 0);
+#endif
 
 		Z_ADDREF_P(nval);
 		Z_ADDREF_P(val);
+#if ZEND_MODULE_API_NO >= 20151012
+		zend_hash_next_index_insert(Z_ARRVAL_P(nval), val);
+		zend_string *zstr_n = zend_string_init(n, n_len, 0);
+		zend_hash_update(htt, zstr_n, nval);
+		zend_string_release(zstr_n);
+		zval_ptr_dtor(val);
+#else
 		zend_hash_next_index_insert(Z_ARRVAL_P(nval), &val, sizeof(zval *), NULL);
 		zend_hash_update(htt, n, n_len, (void **)&nval, sizeof(zval *), NULL);
 		zval_ptr_dtor(&val);
+#endif
 
 		if (flag == 1) {
+#if ZEND_MODULE_API_NO >= 20151012
+			zval_ptr_dtor(nval);
+#else
 			zval_ptr_dtor(&nval);
+#endif
 		}
 	}
 }
@@ -769,7 +1121,11 @@ static void php_protocolbuffers_message_has(INTERNAL_FUNCTION_PARAMETERS, zval *
 	}
 
 	php_protocolbuffers_message_get_hash_table_by_container(container, scheme, instance, &htt, &n, &n_len TSRMLS_CC);
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+#else
 	if (zend_hash_find(htt, n, n_len, (void **)&e) == SUCCESS) {
+#endif
 		if (Z_TYPE_PP(e) == IS_NULL) {
 			RETURN_FALSE;
 		} else if (Z_TYPE_PP(e) == IS_ARRAY) {
@@ -790,7 +1146,35 @@ static int php_protocolbuffers_get_unknown_zval(zval **retval, php_protocolbuffe
 	HashTable *target = NULL;
 	char *unknown_name = {0};
 	int free = 0, unknown_name_len = 0, result = 0;
+	zend_string *zstr_unknown_name;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (container->use_single_property > 0) {
+		zval **unknown_property;
+		if ((*unknown_property = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) == NULL) {
+			return result;
+		}
+
+		unknown_name     = php_protocolbuffers_get_default_unknown_property_name();
+		unknown_name_len = php_protocolbuffers_get_default_unknown_property_name_len();
+		target = Z_ARRVAL_PP(unknown_property);
+
+		if ((*unknown_fieldset = zend_hash_str_find(target, (char*)unknown_name, unknown_name_len)) != NULL) {
+			*retval = *unknown_fieldset;
+			result = 1;
+		}
+
+	} else {
+		zstr_unknown_name = zend_mangle_property_name((char*)"*", 1, (char*)php_protocolbuffers_get_default_unknown_property_name(),
+				php_protocolbuffers_get_default_unknown_property_name_len(), 0);
+		target = Z_OBJPROP_P(instance);
+		if ((*unknown_fieldset = zend_hash_find(target, zstr_unknown_name)) != NULL) {
+			*retval = *unknown_fieldset;
+			result = 1;
+		}
+		zend_string_free(zstr_unknown_name);
+	}
+#else
 	if (container->use_single_property > 0) {
 		zval **unknown_property;
 		if (zend_hash_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len, (void **)&unknown_property) == FAILURE) {
@@ -814,7 +1198,7 @@ static int php_protocolbuffers_get_unknown_zval(zval **retval, php_protocolbuffe
 	if (free) {
 		efree(unknown_name);
 	}
-
+#endif
 	return result;
 }
 
@@ -876,6 +1260,15 @@ static enum ProtocolBuffers_MagicMethod php_protocolbuffers_parse_magic_method(c
 		}
 
 		if (name[i] >= 'A' && name[i] <= 'Z') {
+#if ZEND_MODULE_API_NO >= 20151012
+			if (ZSTR_LEN(buf->s) > 0) {
+				if ((last_is_capital == 0
+					&& i+1 >= name_len)
+					|| (i+1 < name_len && name[i+1] >= 'a' && name[i+1] <= 'z')) {
+					smart_str_appendc(buf, '_');
+				}
+			}
+#else
 			if (buf->len > 0) {
 				if ((last_is_capital == 0
 					&& i+1 >= name_len)
@@ -883,6 +1276,7 @@ static enum ProtocolBuffers_MagicMethod php_protocolbuffers_parse_magic_method(c
 					smart_str_appendc(buf, '_');
 				}
 			}
+#endif
 			smart_str_appendc(buf, name[i] + ('a' - 'A'));
 			smart_str_appendc(buf2, name[i]);
 			last_is_capital = 1;
@@ -911,6 +1305,18 @@ static void php_protocolbuffers_set_from(INTERNAL_FUNCTION_PARAMETERS, zval *ins
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
 
 
+#if ZEND_MODULE_API_NO >= 20151012
+	for (zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(params), &pos);
+		(*param = zend_hash_get_current_data_ex(Z_ARRVAL_P(params), &pos)) != NULL;
+		zend_hash_move_forward_ex(Z_ARRVAL_P(params), &pos)) {
+
+		zend_string *zstr_key = zend_string_init(key, key_len, 0);
+		if (zend_hash_get_current_key_ex(Z_ARRVAL_P(params), &zstr_key, &index, &pos) == HASH_KEY_IS_STRING) {
+			php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, key, key_len, key, key_len, *param);
+		}
+		zend_string_release(zstr_key);
+	}
+#else
 	for (zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(params), &pos);
 		zend_hash_get_current_data_ex(Z_ARRVAL_P(params), (void **)&param, &pos) == SUCCESS;
 		zend_hash_move_forward_ex(Z_ARRVAL_P(params), &pos)) {
@@ -919,6 +1325,7 @@ static void php_protocolbuffers_set_from(INTERNAL_FUNCTION_PARAMETERS, zval *ins
 			php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, key, key_len, key, key_len, *param);
 		}
 	}
+#endif
 }
 
 /* {{{ proto ProtocolBuffersMessage ProtocolBuffersMessage::__construct([array $params])
@@ -984,12 +1391,19 @@ PHP_METHOD(protocolbuffers_message, parseFromString)
 		"s", &data, &data_len) == FAILURE) {
 		return;
 	}
+#if ZEND_MODULE_API_NO >= 20151012
+	if (EG(current_execute_data)->called_scope) {
+		php_protocolbuffers_decode(INTERNAL_FUNCTION_PARAM_PASSTHRU, data, data_len, ZSTR_VAL(EG(current_execute_data)->called_scope->name), ZSTR_LEN(EG(current_execute_data)->called_scope->name));
+	} else {
+		zend_throw_exception_ex(spl_ce_RuntimeException, 0 TSRMLS_CC, "Missing EG(current_scope). this is bug");
+	}
+#else
 	if (EG(called_scope)) {
 		php_protocolbuffers_decode(INTERNAL_FUNCTION_PARAM_PASSTHRU, data, data_len, EG(called_scope)->name, EG(called_scope)->name_length);
 	} else {
 		zend_throw_exception_ex(spl_ce_RuntimeException, 0 TSRMLS_CC, "Missing EG(current_scope). this is bug");
 	}
-
+#endif
 #endif
 }
 /* }}} */
@@ -1040,7 +1454,11 @@ PHP_METHOD(protocolbuffers_message, current)
 	HashTable *hash;
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+#if ZEND_MODULE_API_NO >= 20151012
+	message = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 	message = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
+#endif
 
 	if (container->use_single_property < 1) {
 		name     = container->scheme[message->offset].mangled_name;
@@ -1053,14 +1471,22 @@ PHP_METHOD(protocolbuffers_message, current)
 		name     = container->scheme[message->offset].name;
 		name_len = container->scheme[message->offset].name_len;
 
-		if (zend_hash_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len+1, (void**)&c) == SUCCESS) {
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((*c = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) != NULL) {
+#else
+		if (zend_hash_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len, (void**)&c) == SUCCESS) {
+#endif
 			hash = Z_ARRVAL_PP(c);
 		}
 
 		hash = Z_OBJPROP_PP(c);
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*tmp = zend_hash_str_find(hash, name, name_len)) != NULL) {
+#else
 	if (zend_hash_find(hash, name, name_len, (void **)&tmp) == SUCCESS) {
+#endif
 		RETVAL_ZVAL(*tmp, 1, 0);
 	}
 }
@@ -1075,9 +1501,15 @@ PHP_METHOD(protocolbuffers_message, key)
 	php_protocolbuffers_message *message;
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+#if ZEND_MODULE_API_NO >= 20151012
+	message = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+
+	RETURN_STRING(container->scheme[message->offset].name);
+#else
 	message = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
 
 	RETURN_STRING(container->scheme[message->offset].name, 1);
+#endif
 }
 /* }}} */
 
@@ -1090,7 +1522,11 @@ PHP_METHOD(protocolbuffers_message, next)
 	php_protocolbuffers_message *message;
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+#if ZEND_MODULE_API_NO >= 20151012
+	message = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 	message = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
+#endif
 	message->offset++;
 }
 /* }}} */
@@ -1104,7 +1540,11 @@ PHP_METHOD(protocolbuffers_message, rewind)
 	php_protocolbuffers_message *message;
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+#if ZEND_MODULE_API_NO >= 20151012
+	message = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 	message = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
+#endif
 
 	if (message->max == 0) {
 		message->max = container->size;
@@ -1122,7 +1562,11 @@ PHP_METHOD(protocolbuffers_message, valid)
 	php_protocolbuffers_message *message;
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+#if ZEND_MODULE_API_NO >= 20151012
+	message = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 	message = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
+#endif
 
 	if (-1 < message->offset && message->offset < message->max) {
 		RETURN_TRUE;
@@ -1197,6 +1641,55 @@ PHP_METHOD(protocolbuffers_message, __call)
 		return;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	flag = php_protocolbuffers_parse_magic_method(name, name_len, &buf, &buf2);
+	if (flag == 0) {
+		zend_error(E_ERROR, "Call to undefined method %s::%s()", Z_OBJCE_P(instance)->name, name);
+		return;
+	}
+
+	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+	switch (flag) {
+		case MAGICMETHOD_GET:
+		{
+			zval **tmp = NULL;
+			if (params != NULL && Z_TYPE_P(params) == IS_ARRAY && zend_hash_num_elements(Z_ARRVAL_P(params)) > 0) {
+				zend_hash_get_current_data(Z_ARRVAL_P(params));
+				php_protocolbuffers_message_get(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), *tmp);
+			} else {
+				php_protocolbuffers_message_get(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), NULL);
+			}
+		}
+		break;
+		case MAGICMETHOD_MUTABLE:
+		{
+			php_protocolbuffers_message_get(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), NULL);
+			php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), return_value);
+		}
+		break;
+		case MAGICMETHOD_SET:
+		{
+			zval **tmp = NULL;
+
+			zend_hash_get_current_data(Z_ARRVAL_P(params));
+			php_protocolbuffers_message_set(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), *tmp);
+		}
+		break;
+		case MAGICMETHOD_APPEND:
+		{
+			zval **tmp = NULL;
+
+			zend_hash_get_current_data(Z_ARRVAL_P(params));
+			php_protocolbuffers_message_append(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s), *tmp);
+		}
+		break;
+		case MAGICMETHOD_CLEAR:
+			php_protocolbuffers_message_clear(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s));
+		case MAGICMETHOD_HAS:
+			php_protocolbuffers_message_has(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s), ZSTR_VAL(buf2.s), ZSTR_LEN(buf2.s));
+		break;
+	}
+#else
 	flag = php_protocolbuffers_parse_magic_method(name, name_len, &buf, &buf2);
 	if (flag == 0) {
 		zend_error(E_ERROR, "Call to undefined method %s::%s()", Z_OBJCE_P(instance)->name, name);
@@ -1244,6 +1737,7 @@ PHP_METHOD(protocolbuffers_message, __call)
 			php_protocolbuffers_message_has(INTERNAL_FUNCTION_PARAM_PASSTHRU, instance, container, buf.c, buf.len, buf2.c, buf2.len);
 		break;
 	}
+#endif
 
 	smart_str_free(&buf);
 	smart_str_free(&buf2);
@@ -1362,6 +1856,7 @@ PHP_METHOD(protocolbuffers_message, getExtension)
 	int name_len = 0, n_len = 0;
 	php_protocolbuffers_scheme_container *container;
 	int is_mangled = 0;
+	zend_string *zstr_n;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
 		"s", &name, &name_len) == FAILURE) {
@@ -1369,6 +1864,70 @@ PHP_METHOD(protocolbuffers_message, getExtension)
 	}
 
 	ce = Z_OBJCE_P(instance);
+#if ZEND_MODULE_API_NO >= 20151012
+	if (!php_protocolbuffers_extension_registry_get_registry(registry, ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), &extension_registry TSRMLS_CC)) {
+		goto err;
+	}
+
+	if (!php_protocolbuffers_extension_registry_get_descriptor_by_name(extension_registry, name, name_len, &field_descriptor TSRMLS_CC)) {
+		goto err;
+	}
+
+	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+	if (container->use_single_property > 0) {
+		if ((*b = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) == NULL) {
+			return;
+		}
+
+		n = name;
+		n_len = name_len;
+		htt = Z_ARRVAL_PP(b);
+		if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+			if (Z_TYPE_PP(e) == IS_NULL) {
+				int x = 0;
+				for (x = 0; x < container->size; x++) {
+					php_protocolbuffers_scheme *scheme;
+
+					scheme = &container->scheme[x];
+					if (scheme->ce != NULL && strcmp(scheme->name, name) == 0) {
+						zval *tmp;
+						object_init_ex(tmp, scheme->ce);
+						php_protocolbuffers_properties_init(tmp, scheme->ce TSRMLS_CC);
+
+						RETURN_ZVAL(tmp, 0, 1);
+						break;
+					}
+				}
+			}
+
+			RETURN_ZVAL(*e, 1, 0);
+		}
+	} else {
+		htt = Z_OBJPROP_P(instance);
+		zstr_n = zend_mangle_property_name((char*)"*", 1, (char*)name, name_len+1, 0);
+		if ((*e = zend_hash_find(htt, zstr_n)) != NULL) {
+			zend_string_free(zstr_n);
+			if (Z_TYPE_PP(e) == IS_NULL) {
+				int x = 0;
+				for (x = 0; x < container->size; x++) {
+					php_protocolbuffers_scheme *scheme;
+
+					scheme = &container->scheme[x];
+					if (scheme->ce != NULL && strcmp(scheme->name, name) == 0) {
+						zval *tmp;
+						object_init_ex(tmp, scheme->ce);
+						php_protocolbuffers_properties_init(tmp, scheme->ce TSRMLS_CC);
+
+						RETURN_ZVAL(tmp, 0, 1);
+						break;
+					}
+				}
+			}
+
+			RETURN_ZVAL(*e, 1, 0);
+		}
+	}
+#else
 	if (!php_protocolbuffers_extension_registry_get_registry(registry, ce->name, ce->name_length, &extension_registry TSRMLS_CC)) {
 		goto err;
 	}
@@ -1417,7 +1976,7 @@ PHP_METHOD(protocolbuffers_message, getExtension)
 
 		RETURN_ZVAL(*e, 1, 0);
 	}
-
+#endif
 	return;
 err:
 	zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "extension %s does not find", name);
@@ -1445,6 +2004,49 @@ PHP_METHOD(protocolbuffers_message, hasExtension)
 
 	ce = Z_OBJCE_P(instance);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	zend_string *zstr_n;
+	if (!php_protocolbuffers_extension_registry_get_registry(registry, ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), &extension_registry TSRMLS_CC)) {
+		goto err;
+	}
+
+	if (!php_protocolbuffers_extension_registry_get_descriptor_by_name(extension_registry, name, name_len, &field_descriptor TSRMLS_CC)) {
+		goto err;
+	}
+
+	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+	if (container->use_single_property > 0) {
+		if ((*b = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) == NULL) {
+			return;
+		}
+
+		n = name;
+		n_len = name_len;
+		htt = Z_ARRVAL_PP(b);
+		if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+			if (Z_TYPE_PP(e) == IS_FALSE) {
+				RETURN_FALSE;
+			} else {
+				RETURN_TRUE;
+			}
+		} else {
+			RETURN_FALSE;
+		}
+	} else {
+		htt = Z_OBJPROP_P(instance);
+		zstr_n = zend_mangle_property_name((char*)"*", 1, (char*)name, name_len+1, 0);
+		if ((*e = zend_hash_find(htt, zstr_n)) != NULL) {
+			zend_string_free(zstr_n);
+			if (Z_TYPE_PP(e) == IS_FALSE) {
+				RETURN_FALSE;
+			} else {
+				RETURN_TRUE;
+			}
+		} else {
+			RETURN_FALSE;
+		}
+	}
+#else
 	if (!php_protocolbuffers_extension_registry_get_registry(registry, ce->name, ce->name_length, &extension_registry TSRMLS_CC)) {
 		goto err;
 	}
@@ -1480,6 +2082,7 @@ PHP_METHOD(protocolbuffers_message, hasExtension)
 	} else {
 		RETURN_FALSE;
 	}
+#endif
 err:
 	zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "extension %s does not find", name);
 }
@@ -1506,6 +2109,36 @@ PHP_METHOD(protocolbuffers_message, setExtension)
 
 	ce = Z_OBJCE_P(instance);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (!php_protocolbuffers_extension_registry_get_registry(registry, ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), &extension_registry TSRMLS_CC)) {
+		goto err;
+	}
+
+	if (!php_protocolbuffers_extension_registry_get_descriptor_by_name(extension_registry, name, name_len, &field_descriptor TSRMLS_CC)) {
+		goto err;
+	}
+
+	zend_string *zstr_n;
+	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+	if (container->use_single_property > 0) {
+		if ((*b = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) == NULL) {
+			return;
+		}
+
+		n = name;
+		n_len = name_len+1;
+		htt = Z_ARRVAL_PP(b);
+		Z_ADDREF_P(value);
+		zstr_n = zend_string_init(n, n_len, 0);
+		zend_hash_update(htt, zstr_n, value);
+		zend_string_release(zstr_n);
+	} else {
+		htt = Z_OBJPROP_P(instance);
+		zstr_n = zend_mangle_property_name((char*)"*", 1, (char*)name, name_len+1, 0);
+		Z_ADDREF_P(value);
+		zend_hash_update(htt, zstr_n, value);
+	}
+#else
 	if (!php_protocolbuffers_extension_registry_get_registry(registry, ce->name, ce->name_length, &extension_registry TSRMLS_CC)) {
 		goto err;
 	}
@@ -1516,7 +2149,7 @@ PHP_METHOD(protocolbuffers_message, setExtension)
 
 	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
 	if (container->use_single_property > 0) {
-		if (zend_hash_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len+1, (void **)&b) == FAILURE) {
+		if (zend_hash_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len, (void **)&b) == FAILURE) {
 			return;
 		}
 
@@ -1534,7 +2167,7 @@ PHP_METHOD(protocolbuffers_message, setExtension)
 	if (is_mangled) {
 		efree(n);
 	}
-
+#endif
 	return;
 err:
 	zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "extension %s does not find", name);
@@ -1554,6 +2187,7 @@ PHP_METHOD(protocolbuffers_message, clearExtension)
 	int name_len = 0, n_len = 0;
 	php_protocolbuffers_scheme_container *container;
 	int is_mangled = 0;
+	zend_string *zstr_n;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
 		"s", &name, &name_len) == FAILURE) {
@@ -1562,6 +2196,45 @@ PHP_METHOD(protocolbuffers_message, clearExtension)
 
 	ce = Z_OBJCE_P(instance);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (!php_protocolbuffers_extension_registry_get_registry(registry, ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), &extension_registry TSRMLS_CC)) {
+		goto err;
+	}
+
+	if (!php_protocolbuffers_extension_registry_get_descriptor_by_name(extension_registry, name, name_len, &field_descriptor TSRMLS_CC)) {
+		goto err;
+	}
+
+	PHP_PROTOCOLBUFFERS_MESSAGE_CHECK_SCHEME
+	if (container->use_single_property > 0) {
+		if ((*b = zend_hash_str_find(Z_OBJPROP_P(instance), container->single_property_name, container->single_property_name_len)) == NULL) {
+			return;
+		}
+
+		n = name;
+		n_len = name_len;
+		htt = Z_ARRVAL_PP(b);
+		if ((*e = zend_hash_str_find(htt, n, n_len)) != NULL) {
+			zval *tmp;
+			zval_ptr_dtor(*e);
+			ZVAL_NULL(tmp);
+			*e = tmp;
+			RETURN_NULL();
+		}
+	} else {
+		htt = Z_OBJPROP_P(instance);
+		zstr_n = zend_mangle_property_name((char*)"*", 1, (char*)name, name_len+1, 0);
+		if ((*e = zend_hash_find(htt, zstr_n)) != NULL) {
+			zval *tmp;
+			zend_string_free(zstr_n);
+			zval_ptr_dtor(*e);
+			ZVAL_NULL(tmp);
+			*e = tmp;
+			RETURN_NULL();
+		}
+	}
+
+#else
 	if (!php_protocolbuffers_extension_registry_get_registry(registry, ce->name, ce->name_length, &extension_registry TSRMLS_CC)) {
 		goto err;
 	}
@@ -1596,6 +2269,7 @@ PHP_METHOD(protocolbuffers_message, clearExtension)
 		*e = tmp;
 		RETURN_NULL();
 	}
+#endif
 
 	return;
 err:
@@ -1649,7 +2323,11 @@ PHP_METHOD(protocolbuffers_message, containerOf)
 	zval *instance = getThis();
 	php_protocolbuffers_message *m;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	m = (php_protocolbuffers_message *) ((char*)Z_OBJ_P(instance) - XtOffsetOf(php_protocolbuffers_message, zo)); 
+#else
 	m = PHP_PROTOCOLBUFFERS_GET_OBJECT(php_protocolbuffers_message, instance);
+#endif
 
 	if (m->container != NULL) {
 		RETURN_ZVAL(m->container, 1, 0);
@@ -1669,12 +2347,24 @@ PHP_METHOD(protocolbuffers_message, jsonSerialize)
 
 	if (json_serializable_checked == 0) {
 		/* checks JsonSerializable class (for json dynamic module)*/
+#if ZEND_MODULE_API_NO >= 20151012
+		zend_string *json_class = zend_string_init(ZEND_STRS("JsonSerializable"), 0);
+		if ((*json = zend_lookup_class(json_class)) != NULL) {
+			if (!instanceof_function(php_protocol_buffers_message_class_entry, *json TSRMLS_CC)) {
+				zend_throw_exception_ex(spl_ce_RuntimeException, 0 TSRMLS_CC, "JsonSerializable does not support on this version (probably json module doesn't load)");
+				zend_string_release(json_class);
+				return;
+			}
+		}
+		zend_string_release(json_class);
+#else
 		if (zend_lookup_class("JsonSerializable", sizeof("JsonSerializable")-1, &json TSRMLS_CC) != FAILURE) {
 			if (!instanceof_function(php_protocol_buffers_message_class_entry, *json TSRMLS_CC)) {
 				zend_throw_exception_ex(spl_ce_RuntimeException, 0 TSRMLS_CC, "JsonSerializable does not support on this version (probably json module doesn't load)");
 				return;
 			}
 		}
+#endif
 		json_serializable_checked = 1;
 	}
 

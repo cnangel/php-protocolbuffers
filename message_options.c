@@ -39,11 +39,20 @@ int php_protocolbuffers_message_options_init_properties(zval *object TSRMLS_DC)
 	ALLOC_HASHTABLE(properties);
 	zend_hash_init(properties, 0, NULL, ZVAL_PTR_DTOR, 0);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(tmp);
+	zend_string *extensions = zend_string_init(ZEND_STRS("extensions"), 0);
+	zend_hash_update(properties, extensions, tmp);
+	zend_string_release(extensions);
+
+	zend_merge_properties(object, properties);
+#else
 	MAKE_STD_ZVAL(tmp);
 	array_init(tmp);
 	zend_hash_update(properties, "extensions", sizeof("extensions"), (void **)&tmp, sizeof(zval), NULL);
 
 	zend_merge_properties(object, properties, 1 TSRMLS_CC);
+#endif
 
 	return 0;
 }
@@ -65,6 +74,27 @@ PHP_METHOD(protocolbuffers_message_options, getExtension)
 		return;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	zval rv;
+	options = zend_read_property(php_protocol_buffers_descriptor_builder_class_entry, getThis(), ZEND_STRS("extensions")-1, 1, &rv);
+
+	if ((*result = zend_hash_str_find(Z_ARRVAL_P(options), name, name_len)) == NULL) {
+		if (strcmp(name, "php") == 0) {
+			zval *obj;
+
+			object_init_ex(obj, php_protocol_buffers_php_message_options_class_entry);
+
+			zend_string *n = zend_string_init(name, name_len+1, 0);
+			zend_hash_update(Z_ARRVAL_P(options), n, obj);
+			zend_string_release(n);
+			result = &obj;
+		} else {
+			zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0 TSRMLS_CC, "%s extension does not support. now only supports php extension", name);
+			return;
+		}
+	}
+
+#else
 	options = zend_read_property(php_protocol_buffers_descriptor_builder_class_entry, getThis(), ZEND_STRS("extensions")-1, 1 TSRMLS_CC);
 
 	if (zend_hash_find(Z_ARRVAL_P(options), name, name_len, (void **)&result) != SUCCESS) {
@@ -81,6 +111,8 @@ PHP_METHOD(protocolbuffers_message_options, getExtension)
 			return;
 		}
 	}
+
+#endif
 
 	RETURN_ZVAL(*result, 1, 0);
 }

@@ -290,7 +290,18 @@ typedef struct{
 } php_protocolbuffers_unknown_field;
 
 
-#  if ZEND_MODULE_API_NO >= 20100525
+#  if ZEND_MODULE_API_NO >= 20151012
+#  define PHP_PROTOCOLBUFFERS_STD_CREATE_OBJECT(STRUCT_NAME) \
+	STRUCT_NAME *object;\
+	\
+	object = (STRUCT_NAME*)ecalloc(1, sizeof(*object));\
+	zend_object_std_init(&object->zo, ce TSRMLS_CC);\
+	object_properties_init(&object->zo, ce);\
+	zend_objects_store_put(&object->zo);\
+	retval.handle = object->zo.handle;\
+	zend_objects_destroy_object(&object->zo);\
+	retval.handlers = zend_get_std_object_handlers();
+#  elif ZEND_MODULE_API_NO >= 20100525
 #  define PHP_PROTOCOLBUFFERS_STD_CREATE_OBJECT(STRUCT_NAME) \
 	STRUCT_NAME *object;\
 	\
@@ -319,7 +330,9 @@ typedef struct{
 	retval.handlers = zend_get_std_object_handlers();
 #  endif
 
+#if ZEND_MODULE_API_NO < 20151012
 #define PHP_PROTOCOLBUFFERS_GET_OBJECT(STRUCT_NAME, OBJECT) (STRUCT_NAME *)zend_object_store_get_object(OBJECT TSRMLS_CC);
+#endif
 
 #if PHP_VERSION_ID < 50300
 # ifndef Z_ADDREF_P

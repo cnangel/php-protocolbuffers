@@ -349,6 +349,28 @@ static void php_protocolbuffers_encode_element_string(PB_ENCODE_CALLBACK_PARAMET
 	int free = 0;
 	zval *t;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (Z_TYPE_P(tmp) != IS_NULL) {
+		if (Z_TYPE_P(tmp) == IS_OBJECT) {
+			zend_call_method_with_0_params(*element, Z_OBJCE_PP(element), NULL, "__tostring", t);
+			tmp = t;
+			free = 1;
+		}
+
+		if (PBG(validate_string) && is_utf8(Z_STRVAL_P(tmp), Z_STRLEN_P(tmp)) < 1) {
+			zend_throw_exception_ex(php_protocol_buffers_invalid_byte_sequence_class_entry, 0 TSRMLS_CC, "passed string is not valid utf8 string");
+			return;
+		}
+
+		php_protocolbuffers_serializer_write_varint32(ser, (scheme->tag << 3) | WIRETYPE_LENGTH_DELIMITED);
+		php_protocolbuffers_serializer_write_varint32(ser, Z_STRLEN_P(tmp));
+
+		php_protocolbuffers_serializer_write_chararray(ser, (unsigned char*)Z_STRVAL_P(tmp), Z_STRLEN_P(tmp));
+		if (free) {
+			zval_ptr_dtor(t);
+		}
+	}
+#else
 	if (Z_TYPE_P(tmp) != IS_NULL) {
 		if (Z_TYPE_P(tmp) == IS_OBJECT) {
 			zend_call_method_with_0_params(element, Z_OBJCE_PP(element), NULL, "__tostring", &t);
@@ -369,6 +391,7 @@ static void php_protocolbuffers_encode_element_string(PB_ENCODE_CALLBACK_PARAMET
 			zval_ptr_dtor(&t);
 		}
 	}
+#endif
 }
 
 static void php_protocolbuffers_encode_element_msg(PB_ENCODE_CALLBACK_PARAMETERS)
@@ -380,6 +403,25 @@ static void php_protocolbuffers_encode_element_msg(PB_ENCODE_CALLBACK_PARAMETERS
 
 	ce = Z_OBJCE_PP(element);
 
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocolbuffers_get_scheme_container(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), &n_container TSRMLS_CC);
+	if (err) {
+		php_error_docref(NULL TSRMLS_CC, E_ERROR, "php_protocolbuffers_get_scheme_container failed. %s does not have getDescriptor method", ce->name);
+		return;
+	}
+	/* TODO: add error handling */
+
+	php_protocolbuffers_encode_message(INTERNAL_FUNCTION_PARAM_PASSTHRU, *element, n_container, &n_ser);
+	if (EG(exception)) {
+		return;
+	}
+
+	php_protocolbuffers_serializer_write_varint32(ser, (scheme->tag << 3) | WIRETYPE_LENGTH_DELIMITED);
+	php_protocolbuffers_serializer_write_varint32(ser, n_ser->buffer_size);
+	php_protocolbuffers_serializer_write_chararray(ser, n_ser->buffer, n_ser->buffer_size);
+
+	php_protocolbuffers_serializer_destroy(n_ser);
+#else
 	php_protocolbuffers_get_scheme_container(ce->name, ce->name_length, &n_container TSRMLS_CC);
 	if (err) {
 		php_error_docref(NULL TSRMLS_CC, E_ERROR, "php_protocolbuffers_get_scheme_container failed. %s does not have getDescriptor method", ce->name);
@@ -397,6 +439,7 @@ static void php_protocolbuffers_encode_element_msg(PB_ENCODE_CALLBACK_PARAMETERS
 	php_protocolbuffers_serializer_write_chararray(ser, n_ser->buffer, n_ser->buffer_size);
 
 	php_protocolbuffers_serializer_destroy(n_ser);
+#endif
 }
 
 static void php_protocolbuffers_encode_element_bytes(PB_ENCODE_CALLBACK_PARAMETERS)
@@ -517,6 +560,72 @@ static void php_protocolbuffers_encode_element(INTERNAL_FUNCTION_PARAMETERS, php
 		name_len = scheme->name_len;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*tmp = zend_hash_str_find(hash, name, name_len)) != NULL) {
+		php_protocolbuffers_serializer *n_ser = NULL;
+
+		if (scheme->repeated) {
+			HashPosition pos;
+			zval **element;
+
+			if (is_packed == 1) {
+				php_protocolbuffers_serializer_init(&n_ser);
+			} else {
+				n_ser = ser;
+			}
+
+			if (Z_TYPE_PP(tmp) != IS_ARRAY) {
+				array_init(*tmp);
+			}
+
+			for(zend_hash_internal_pointer_reset_ex(Z_ARRVAL_PP(tmp), &pos);
+							(*element = zend_hash_get_current_data_ex(Z_ARRVAL_PP(tmp), &pos)) != NULL;
+							zend_hash_move_forward_ex(Z_ARRVAL_PP(tmp), &pos)
+			) {
+				if (Z_TYPE_PP(element) == IS_NULL) {
+					continue;
+				}
+
+				f(INTERNAL_FUNCTION_PARAM_PASSTHRU, element, scheme, n_ser, is_packed);
+			}
+
+			if (is_packed == 1) {
+				php_protocolbuffers_serializer_write_varint32(ser, (scheme->tag << 3) | WIRETYPE_LENGTH_DELIMITED);
+				php_protocolbuffers_serializer_write_varint32(ser, n_ser->buffer_size);
+				php_protocolbuffers_serializer_write_chararray(ser, (unsigned char*)n_ser->buffer, n_ser->buffer_size);
+
+				php_protocolbuffers_serializer_destroy(n_ser);
+			}
+
+		} else {
+			if (is_packed == 1) {
+				php_error_docref(NULL TSRMLS_CC, E_ERROR, "php_protocolbuffers_encode_element_packed called non repeated scheme. this is bug");
+			} else {
+				if (scheme->required > 0 && Z_TYPE_PP(tmp) == IS_NULL) {
+					zend_throw_exception_ex(php_protocol_buffers_uninitialized_message_exception_class_entry, 0 TSRMLS_CC, "the class does not have required property `%s`.", scheme->name);
+					return;
+				}
+				if (scheme->required == 0 && Z_TYPE_PP(tmp) == IS_NULL) {
+					return;
+				}
+				if (scheme->ce != NULL && Z_TYPE_PP(tmp) != IS_OBJECT) {
+					return;
+				}
+				if (Z_TYPE_PP(tmp) == IS_ARRAY) {
+					//php_error_docref(NULL TSRMLS_CC, E_WARNING, "%s is not repeated field but array given", scheme->name);
+					return;
+				}
+
+				f(INTERNAL_FUNCTION_PARAM_PASSTHRU, tmp, scheme, ser, is_packed);
+			}
+		}
+	} else {
+		if (scheme->required > 0) {
+			zend_throw_exception_ex(php_protocol_buffers_invalid_protocolbuffers_exception_class_entry, 0 TSRMLS_CC, "the class does not declared required property `%s`. probably you missed declaration", scheme->name);
+			return;
+		}
+	}
+#else
 	if (zend_hash_find(hash, name, name_len, (void **)&tmp) == SUCCESS) {
 		php_protocolbuffers_serializer *n_ser = NULL;
 
@@ -581,6 +690,7 @@ static void php_protocolbuffers_encode_element(INTERNAL_FUNCTION_PARAMETERS, php
 			return;
 		}
 	}
+#endif
 }
 
 void php_protocolbuffers_serializer_destroy(php_protocolbuffers_serializer *serializer)
@@ -617,7 +727,97 @@ static void php_protocolbuffers_encode_unknown_fields(php_protocolbuffers_scheme
 	char *uname = {0};
 	int uname_len = 0;
 	zval **unknown = NULL;
+	zend_string *zstr_uname;
+	zend_string *zstr_uuname;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if (container->use_single_property > 0) {
+		uname = "_unknown";
+		uname_len = sizeof("_unknown");
+	} else {
+		zstr_uname = zend_mangle_property_name((char*)"*", 1, (char*)"_unknown", sizeof("_unknown"), 0);
+		uname = ZSTR_VAL(zstr_uname);
+		uname_len = ZSTR_LEN(zstr_uname);
+	}
+
+	if ((*unknown = zend_hash_str_find(hash, uname, uname_len)) != NULL) {
+		zend_string_free(zstr_uname);
+		if (Z_TYPE_PP(unknown) == IS_OBJECT
+		 && Z_OBJCE_PP(unknown) == php_protocol_buffers_unknown_field_set_class_entry) {
+			HashTable *unkht;
+			zval **element, **elmh;
+			char *uuname;
+			int uuname_len;
+
+			unkht = Z_OBJPROP_PP(unknown);
+
+			zstr_uuname = zend_mangle_property_name((char*)"*", 1, (char*)"fields", sizeof("fields"), 0);
+			uuname = ZSTR_VAL(zstr_uuname);
+			uuname_len = ZSTR_LEN(zstr_uuname);
+			if ((*elmh = zend_hash_str_find(unkht, uuname, uuname_len)) != NULL) {
+				HashPosition pos2;
+
+				for(zend_hash_internal_pointer_reset_ex(Z_ARRVAL_PP(elmh), &pos2);
+								(*element = zend_hash_get_current_data_ex(Z_ARRVAL_PP(elmh), &pos2)) != NULL;
+								zend_hash_move_forward_ex(Z_ARRVAL_PP(elmh), &pos2)
+				) {
+					HashPosition pos;
+					php_protocolbuffers_unknown_field *field = NULL;
+					unknown_value **unknown;
+					field = (php_protocolbuffers_unknown_field *) ((char*)Z_OBJ_P(*element) - XtOffsetOf(php_protocolbuffers_unknown_field, zo)); 
+
+					switch (field->type) {
+						case WIRETYPE_VARINT:
+						{
+							for(zend_hash_internal_pointer_reset_ex(field->ht, &pos);
+												(*unknown = zend_hash_get_current_data_ptr_ex(field->ht, &pos)) != NULL;
+												zend_hash_move_forward_ex(field->ht, &pos)
+								) {
+								php_protocolbuffers_serializer_write_varint32(ser, (field->number << 3) | field->type);
+								php_protocolbuffers_serializer_write_varint32(ser, (*unknown)->varint);
+							}
+						}
+						break;
+						case WIRETYPE_FIXED64:
+							for(zend_hash_internal_pointer_reset_ex(field->ht, &pos);
+												(*unknown = zend_hash_get_current_data_ptr_ex(field->ht, &pos)) != NULL;
+												zend_hash_move_forward_ex(field->ht, &pos)
+								) {
+								php_protocolbuffers_serializer_write_varint32(ser, (field->number << 3) | field->type);
+								php_protocolbuffers_serializer_write_chararray(ser, (*unknown)->buffer.val, (*unknown)->buffer.len);
+							}
+						break;
+						case WIRETYPE_LENGTH_DELIMITED:
+						{
+							for(zend_hash_internal_pointer_reset_ex(field->ht, &pos);
+												(*unknown = zend_hash_get_current_data_ptr_ex(field->ht, &pos)) != NULL;
+												zend_hash_move_forward_ex(field->ht, &pos)
+								) {
+								php_protocolbuffers_serializer_write_varint32(ser, (field->number << 3) | field->type);
+								php_protocolbuffers_serializer_write_varint32(ser, (*unknown)->buffer.len);
+								php_protocolbuffers_serializer_write_chararray(ser, (*unknown)->buffer.val, (*unknown)->buffer.len);
+							}
+						}
+						break;
+						case WIRETYPE_START_GROUP:
+						break;
+						case WIRETYPE_END_GROUP:
+						break;
+						case WIRETYPE_FIXED32:
+							for(zend_hash_internal_pointer_reset_ex(field->ht, &pos);
+												(*unknown = zend_hash_get_current_data_ptr_ex(field->ht, &pos)) != NULL;
+												zend_hash_move_forward_ex(field->ht, &pos)
+								) {
+								php_protocolbuffers_serializer_write_varint32(ser, (field->number << 3) | field->type);
+								php_protocolbuffers_serializer_write_chararray(ser, (*unknown)->buffer.val, (*unknown)->buffer.len);
+							}
+						break;
+					}
+				}
+			}
+		}
+	}
+#else
 	if (container->use_single_property > 0) {
 		uname = "_unknown";
 		uname_len = sizeof("_unknown");
@@ -704,6 +904,7 @@ static void php_protocolbuffers_encode_unknown_fields(php_protocolbuffers_scheme
 	if (container->use_single_property < 1) {
 		efree(uname);
 	}
+#endif
 }
 
 
@@ -721,7 +922,11 @@ int php_protocolbuffers_fetch_element(INTERNAL_FUNCTION_PARAMETERS, php_protocol
 		name_len = scheme->name_len;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	if ((*tmp = zend_hash_str_find(hash, name, name_len)) != NULL) {
+#else
 	if (zend_hash_find(hash, name, name_len, (void **)&tmp) == SUCCESS) {
+#endif
 		*output = *tmp;
 	} else {
 		if (scheme->required > 0) {
@@ -749,7 +954,11 @@ int php_protocolbuffers_encode_message(INTERNAL_FUNCTION_PARAMETERS, zval *klass
 	if (container->use_single_property < 1) {
 		hash = Z_OBJPROP_P(klass);
 	} else {
+#if ZEND_MODULE_API_NO >= 20151012
+		if ((*c = zend_hash_str_find(Z_OBJPROP_P(klass), container->single_property_name, container->single_property_name_len+1)) != NULL) {
+#else
 		if (zend_hash_find(Z_OBJPROP_P(klass), container->single_property_name, container->single_property_name_len+1, (void**)&c) == SUCCESS) {
+#endif
 			hash = Z_ARRVAL_PP(c);
 		} else {
 			php_protocolbuffers_serializer_destroy(ser);

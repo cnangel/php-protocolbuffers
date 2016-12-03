@@ -146,7 +146,11 @@ static void php_protocol_buffers_invalid_byte_sequence_exception(TSRMLS_D)
 	zend_class_entry ce;
 
 	INIT_CLASS_ENTRY(ce, "ProtocolBuffersInvalidByteSequenceException", 0);
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocol_buffers_invalid_byte_sequence_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C));
+#else
 	php_protocol_buffers_invalid_byte_sequence_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C), NULL TSRMLS_CC);
+#endif
 
 	PHP_PROTOCOLBUFFERS_REGISTER_NS_CLASS_ALIAS(PHP_PROTOCOLBUFFERS_NAMESPACE, "InvalidByteSequenceException", php_protocol_buffers_invalid_byte_sequence_class_entry);
 }
@@ -156,7 +160,11 @@ static void php_protocol_buffers_invalid_exception(TSRMLS_D)
 	zend_class_entry ce;
 
 	INIT_CLASS_ENTRY(ce, "ProtocolBuffersInvalidProtocolBufferException", 0);
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocol_buffers_invalid_protocolbuffers_exception_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C));
+#else
 	php_protocol_buffers_invalid_protocolbuffers_exception_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C), NULL TSRMLS_CC);
+#endif
 
 	PHP_PROTOCOLBUFFERS_REGISTER_NS_CLASS_ALIAS(PHP_PROTOCOLBUFFERS_NAMESPACE, "InvalidProtocolBufferException", php_protocol_buffers_invalid_protocolbuffers_exception_class_entry);
 }
@@ -166,7 +174,11 @@ static void php_protocolbuffers_uninitialized_message_exception(TSRMLS_D)
 	zend_class_entry ce;
 
 	INIT_CLASS_ENTRY(ce, "ProtocolBuffersUninitializedMessageException", 0);
+#if ZEND_MODULE_API_NO >= 20151012
+	php_protocol_buffers_uninitialized_message_exception_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C));
+#else
 	php_protocol_buffers_uninitialized_message_exception_class_entry = zend_register_internal_class_ex(&ce, php_protocolbuffers_get_exception_base(TSRMLS_C), NULL TSRMLS_CC);
+#endif
 
 	PHP_PROTOCOLBUFFERS_REGISTER_NS_CLASS_ALIAS(PHP_PROTOCOLBUFFERS_NAMESPACE, "UninitializedMessageException", php_protocol_buffers_uninitialized_message_exception_class_entry);
 }
@@ -317,17 +329,27 @@ PHP_MINIT_FUNCTION(protocolbuffers)
 static int implemented = 0;
 PHP_RINIT_FUNCTION(protocolbuffers)
 {
-	zend_class_entry **json;
 	PBG(messages) = NULL;
 	PBG(classes) = NULL;
 	PBG(extension_registry) = NULL;
 	PBG(strict_mode) = 1;
 
 	// NOTE(chobie): prevent segmentaiton fault on CentOS box (CentOS uses json shared modules.)
+#if ZEND_MODULE_API_NO >= 20151012
+	zend_class_entry *json;
+	zend_string *zstr_json = zend_string_init(ZEND_STRS("JsonSerializable"), 0);
+	if (implemented == 0 && (json = zend_lookup_class(zstr_json)) != NULL) {
+		zend_class_implements(php_protocol_buffers_message_class_entry TSRMLS_CC, 1, json);
+		implemented = 1;
+	}
+	zend_string_release(zstr_json);
+#else
+	zend_class_entry **json;
 	if (implemented == 0 && zend_lookup_class("JsonSerializable", sizeof("JsonSerializable")-1, &json TSRMLS_CC) != FAILURE) {
 		zend_class_implements(php_protocol_buffers_message_class_entry TSRMLS_CC, 1, *json);
 		implemented = 1;
 	}
+#endif
 
 	if (!PBG(messages)) {
 		ALLOC_HASHTABLE(PBG(messages));
@@ -359,6 +381,46 @@ PHP_RSHUTDOWN_FUNCTION(protocolbuffers)
 			HashPosition pos;
 			php_protocolbuffers_scheme_container **element;
 
+#if ZEND_MODULE_API_NO >= 20151012
+			for(zend_hash_internal_pointer_reset_ex(PBG(messages), &pos);
+							(*element = zend_hash_get_current_data_ptr_ex(PBG(messages), &pos)) != NULL;
+							zend_hash_move_forward_ex(PBG(messages), &pos)
+			) {
+				for (i = 0; i < (*element)->size; i++) {
+					if ((*element)->scheme[i].original_name != NULL) {
+						efree((*element)->scheme[i].original_name);
+					}
+					if ((*element)->scheme[i].name != NULL) {
+						efree((*element)->scheme[i].name);
+					}
+					if ((*element)->scheme[i].mangled_name != NULL) {
+						efree((*element)->scheme[i].mangled_name);
+					}
+					if ((*element)->scheme[i].default_value != NULL) {
+						zval_ptr_dtor((*element)->scheme[i].default_value);
+					}
+				}
+
+				if ((*element)->single_property_name != NULL) {
+					efree((*element)->single_property_name);
+				}
+
+				if ((*element)->orig_single_property_name != NULL &&
+					memcmp((*element)->orig_single_property_name, php_protocolbuffers_get_default_single_property_name(), php_protocolbuffers_get_default_single_property_name_len()) != 0) {
+					efree((*element)->orig_single_property_name);
+				}
+
+				if ((*element)->scheme != NULL) {
+					efree((*element)->scheme);
+				}
+
+				if ((*element)->extensions != NULL) {
+					efree((*element)->extensions);
+				}
+
+				efree(*element);
+			}
+#else
 			for(zend_hash_internal_pointer_reset_ex(PBG(messages), &pos);
 							zend_hash_get_current_data_ex(PBG(messages), (void **)&element, &pos) == SUCCESS;
 							zend_hash_move_forward_ex(PBG(messages), &pos)
@@ -397,6 +459,7 @@ PHP_RSHUTDOWN_FUNCTION(protocolbuffers)
 
 				efree(*element);
 			}
+#endif
 
 			zend_hash_destroy(PBG(messages));
 			FREE_HASHTABLE(PBG(messages));
@@ -415,7 +478,11 @@ PHP_RSHUTDOWN_FUNCTION(protocolbuffers)
 	}
 
 	if (PBG(extension_registry)) {
+#if ZEND_MODULE_API_NO >= 20151012
+		zval_ptr_dtor(PBG(extension_registry));
+#else
 		zval_ptr_dtor(&PBG(extension_registry));
+#endif
 	}
 
 

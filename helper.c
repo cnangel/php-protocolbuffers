@@ -36,12 +36,20 @@ static void php_protocolbuffers_helper_debug_zval(zval **value TSRMLS_DC)
 
 	php_printf("{\n");
 	php_printf("  address: 0x%lx,\n", (unsigned long)val);
+#if ZEND_MODULE_API_NO >= 20151012
+	php_printf("  type: %d,\n", val->u1.v.type);
+#else
 	php_printf("  type: %d,\n", val->type);
+#endif
 	php_printf("  is_ref: %d,\n", PZVAL_IS_REF(val));
 	php_printf("  refcount: %d,\n", Z_REFCOUNT_PP(value));
 	php_printf("  value: {\n");
 	php_printf("    lval: %ld,\n", val->value.lval);
 	php_printf("    double: %f,\n", val->value.dval);
+#if ZEND_MODULE_API_NO >= 20151012
+	if (val->u1.v.type == 4) {
+	}
+#else
 	if (val->type == 4) {
 		php_printf("    ht: {\n");
 		php_printf("      address: 0x%lx,\n", (unsigned long)val->value.ht);
@@ -49,9 +57,15 @@ static void php_protocolbuffers_helper_debug_zval(zval **value TSRMLS_DC)
 		php_printf("      next_free_elements: %d,\n", (unsigned int)val->value.ht->nNextFreeElement);
 		php_printf("    },\n");
 	}
+#endif
 	php_printf("    object: {\n");
+#if ZEND_MODULE_API_NO >= 20151012
+	php_printf("      handle: 0x%x,\n", val->value.obj->handle);
+	php_printf("      handlers: 0x%lx,\n", (unsigned long)val->value.obj->handlers);
+#else
 	php_printf("      handle: 0x%x,\n", val->value.obj.handle);
 	php_printf("      handlers: 0x%lx,\n", (unsigned long)val->value.obj.handlers);
+#endif
 	php_printf("    },\n");
 	php_printf("  }\n");
 	php_printf("}\n");
@@ -189,7 +203,11 @@ PHP_METHOD(protocolbuffers_helper, writeVarint32)
 	}
 	bytes[size++] = value & 0x7F;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	RETURN_STRINGL((char*)bytes, size);
+#else
 	RETURN_STRINGL((char*)bytes, size, 1);
+#endif
 }
 /* }}} */
 
@@ -214,7 +232,11 @@ PHP_METHOD(protocolbuffers_helper, writeVarint64)
 	}
 	bytes[size++] = value & 0x7F;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	RETURN_STRINGL((char*)bytes, size);
+#else
 	RETURN_STRINGL((char*)bytes, size, 1);
+#endif
 }
 /* }}} */
 

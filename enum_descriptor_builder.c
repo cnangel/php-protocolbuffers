@@ -15,8 +15,12 @@ PHP_METHOD(protocolbuffers_enum_descriptor_builder, __construct)
 {
 	zval *fields;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	array_init(fields);
+#else
 	MAKE_STD_ZVAL(fields);
 	array_init(fields);
+#endif
 
 	php_protocolbuffers_set_protected_property(getThis(), ZEND_STRS("values"), fields TSRMLS_CC);
 }
@@ -37,6 +41,24 @@ PHP_METHOD(protocolbuffers_enum_descriptor_builder, addValue)
 		return;
 	}
 
+#if ZEND_MODULE_API_NO >= 20151012
+	zend_string *zstr_property = zend_mangle_property_name((char*)"*", 1, (char*)ZEND_STRS("values"), 0);
+	if ((*fields = zend_hash_find(Z_OBJPROP_P(instance), zstr_property)) != NULL) {
+		if (php_protocolbuffers_read_protected_property(value, ZEND_STRS("name"), &name TSRMLS_CC)) {
+			if (zend_hash_str_exists(Z_ARRVAL_PP(fields), Z_STRVAL_P(name), Z_STRLEN_P(name))) {
+				if (force < 1) {
+					zend_throw_exception_ex(spl_ce_RuntimeException, 0 TSRMLS_CC, "name `%s` has already registered.", Z_STRVAL_P(name));
+				}
+				zend_string_free(zstr_property);
+				return;
+			}
+		}
+
+		Z_ADDREF_P(value);
+		zend_hash_update(Z_ARRVAL_PP(fields), Z_STR_P(name), value);
+	}
+	zend_string_free(zstr_property);
+#else
 	zend_mangle_property_name(&property, &property_len, (char*)"*", 1, (char*)ZEND_STRS("values"), 0);
 	if (zend_hash_find(Z_OBJPROP_P(instance), property, property_len, (void **)&fields) == SUCCESS) {
 		if (php_protocolbuffers_read_protected_property(value, ZEND_STRS("name"), &name TSRMLS_CC)) {
@@ -53,7 +75,7 @@ PHP_METHOD(protocolbuffers_enum_descriptor_builder, addValue)
 		zend_hash_update(Z_ARRVAL_PP(fields), Z_STRVAL_P(name), Z_STRLEN_P(name)+1, &value, sizeof(zval), NULL);
 	}
 	efree(property);
-
+#endif
 }
 /* }}} */
 
@@ -66,6 +88,27 @@ PHP_METHOD(protocolbuffers_enum_descriptor_builder, build)
 	int property_len;
 	HashPosition pos;
 
+#if ZEND_MODULE_API_NO >= 20151012
+	object_init_ex(result, php_protocol_buffers_enum_descriptor_class_entry);
+
+	array_init(container);
+
+	zend_string *zstr_property = zend_mangle_property_name((char*)"*", 1, (char*)ZEND_STRS("values"), 0);
+	if ((*fields = zend_hash_find(Z_OBJPROP_P(getThis()), zstr_property)) != NULL) {
+		zend_hash_internal_pointer_reset_ex(Z_ARRVAL_PP(fields), &pos);
+		while ((*entry = zend_hash_get_current_data_ex(Z_ARRVAL_PP(fields), &pos)) != NULL) {
+			zval *tmp = NULL;
+
+			php_protocolbuffers_read_protected_property(*entry, ZEND_STRS("name"), &key TSRMLS_CC);
+			php_protocolbuffers_read_protected_property(*entry, ZEND_STRS("value"), &value TSRMLS_CC);
+
+			ZVAL_ZVAL(tmp, value, 1, 0);
+			zend_hash_update(Z_ARRVAL_P(container), Z_STR_P(key), tmp);
+			zend_hash_move_forward_ex(Z_ARRVAL_PP(fields), &pos);
+		}
+	}
+	zend_string_free(zstr_property);
+#else
 	MAKE_STD_ZVAL(result);
 	object_init_ex(result, php_protocol_buffers_enum_descriptor_class_entry);
 
@@ -89,6 +132,7 @@ PHP_METHOD(protocolbuffers_enum_descriptor_builder, build)
 		}
 	}
 	efree(property);
+#endif
 
 	php_protocolbuffers_set_protected_property(result, ZEND_STRS("values"), container TSRMLS_CC);
 	RETURN_ZVAL(result, 0, 1);
